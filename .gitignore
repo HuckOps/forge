@@ -1,0 +1,6 @@
+config/*.yaml
+
+.idea
+.vscode
+
+web/node_modules
