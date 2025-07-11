@@ -6,6 +6,7 @@ const (
 	Success ErrCode = iota
 	RequestError
 	SearchError
+	InsertError
 )
 
 type Restful[T any] struct {

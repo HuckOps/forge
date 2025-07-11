@@ -3,7 +3,6 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"github.com/HuckOps/forge/db"
 	"github.com/HuckOps/forge/model"
 	"github.com/HuckOps/forge/mq"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -23,7 +22,6 @@ func Registry(d amqp.Delivery) {
 		return
 	}
 
-	node := model.Node{}
 	opts := options.UpdateOne().SetUpsert(true)
 
 	update := bson.M{
@@ -40,7 +38,7 @@ func Registry(d amqp.Delivery) {
 		},
 	}
 
-	_, err := db.MongoDB.Collection(node.TableName()).UpdateOne(ctx, bson.M{"uuid": msg.UUID}, update, opts)
+	_, err := (&model.Node{}).Repository().Collection().UpdateOne(ctx, bson.M{"uuid": msg.UUID}, update, opts)
 	if err != nil {
 		log.Fatalln("update failed:", err)
 	}

@@ -2,39 +2,53 @@ package node
 
 import (
 	"context"
-	"github.com/HuckOps/forge/db"
+	"errors"
 	"github.com/HuckOps/forge/model"
+	"github.com/HuckOps/forge/server/repository/pagination"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-func GetNodesByPagination(ctx context.Context, skip, limit int, filter bson.M) ([]model.Node, int64, error) {
-	n := model.Node{}
-	collection := db.MongoDB.Collection(n.TableName())
+func GetNodesByPagination(ctx context.Context, skip, limit int, filter bson.M) (pagination.PaginationResult[model.Node], error) {
+	query := pagination.PaginationQuery[model.Node]{
+		Repository: (&model.Node{}).Repository(),
+		Skip:       skip,
+		Limit:      limit,
+		Filter:     filter,
+		Sort:       bson.D{{"created_at", -1}},
+	}
+	return pagination.GetByPagination[model.Node](ctx, query)
+}
 
-	total, err := collection.CountDocuments(ctx, bson.M{})
+func SetNodeLabel(ctx context.Context, nodeIDs []bson.ObjectID, labelIDs []bson.ObjectID) error {
+	nodes, err := (&model.Node{}).Repository().FindByIDs(ctx, nodeIDs)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
-	findOptions := options.Find()
-	findOptions.SetSkip(int64(skip))
-	findOptions.SetLimit(int64(limit))
-	findOptions.SetSort(bson.D{{"created_at", -1}})
+	if len(nodes) != len(nodeIDs) {
+		return errors.New("node ids not match")
+	}
 
-	cursor, err := collection.Find(ctx, filter, findOptions)
+	labels, err := (&model.Label{}).Repository().FindByIDs(ctx, labelIDs)
+
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
 
-	nodes := make([]model.Node, 0)
-	if err = cursor.All(ctx, &nodes); err != nil {
-		return nil, 0, err
+	if len(labels) != len(labelIDs) {
+		return errors.New("label ids not match")
 	}
 
-	if nodes == nil {
-		nodes = make([]model.Node, 0)
+	nodeLabels := make([]model.NodeLabel, 0)
+	for _, nodeID := range nodeIDs {
+		for _, labelID := range labelIDs {
+			nodeLabels = append(nodeLabels, model.NodeLabel{
+				NodeID:  nodeID,
+				LabelID: labelID,
+			})
+		}
 	}
 
-	return nodes, total, nil
+	_, err = (&model.NodeLabel{}).Repository().CreateMany(ctx, nodeLabels)
+	return err
 }

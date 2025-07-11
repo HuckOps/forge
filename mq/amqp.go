@@ -73,7 +73,7 @@ func (c *rabbitMQClient) StartConsumer(ctx context.Context, queue string, handle
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("Stopping consumer for queue: %s", queue)
+			log.Printf("Stopping worker for queue: %s", queue)
 			return
 		default:
 		}

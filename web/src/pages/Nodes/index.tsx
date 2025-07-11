@@ -1,3 +1,4 @@
+import Operate from '@/pages/Nodes/operate';
 import { getNodes } from '@/services/api';
 import {
   PageContainer,
@@ -5,7 +6,7 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import { Tag } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export default function () {
   const ref = useRef<ProFormInstance>();
@@ -16,6 +17,8 @@ export default function () {
   const [pageSize, setPageSize] = useState<number>(20);
   const [loading, setLoading] = useState<boolean>(false);
 
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+
   const getData = async () => {
     setLoading(true);
     console.log(ref.current?.getFieldsValue());
@@ -25,7 +28,7 @@ export default function () {
       ref.current?.getFieldsValue(),
     );
     if (result) {
-      setNodes(result.data.nodes);
+      setNodes(result.data.data);
       setTotal(result.data.total);
       setLoading(false);
       return;
@@ -36,6 +39,8 @@ export default function () {
     getData().then();
   }, [pageSize, currentPage]);
 
+  // @ts-ignore
+  // @ts-ignore
   return (
     <PageContainer
       header={{
@@ -47,6 +52,14 @@ export default function () {
         dataSource={nodes}
         loading={loading}
         onSubmit={() => getData()}
+        rowSelection={{
+          align: 'left',
+          selectedRowKeys: selectedRowKeys,
+          onChange: (newSelectedRowKeys: React.Key[]) =>
+            //   @ts-ignore
+            setSelectedRowKeys(newSelectedRowKeys),
+        }}
+        rowKey={'id'}
         columns={[
           { title: 'UUID', dataIndex: 'uuid' },
           {
@@ -93,6 +106,16 @@ export default function () {
             setPageSize(size);
             setCurrentPage(page);
           },
+        }}
+        toolbar={{
+          search: (
+            <Operate
+              SelectedRowKeys={selectedRowKeys}
+              resetSelectRowKeys={() => {
+                setSelectedRowKeys([]);
+              }}
+            />
+          ),
         }}
       ></ProTable>
     </PageContainer>

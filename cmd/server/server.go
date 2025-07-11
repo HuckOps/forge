@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/HuckOps/forge/config"
 	"github.com/HuckOps/forge/db"
+	"github.com/HuckOps/forge/model"
 	"github.com/HuckOps/forge/server"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -17,6 +18,9 @@ func main() {
 	defer cancel()
 	config.InitServerConfig("./config/server.yaml")
 	db.InitMongo(ctx, config.ServerConfig.MongoURL)
+	if err := model.InitCollections(ctx); err != nil {
+		log.Fatal(err)
+	}
 	r := gin.Default()
 	server.RegistryRouter(r)
 	srv := &http.Server{

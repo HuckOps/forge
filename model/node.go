@@ -1,50 +1,21 @@
 package model
 
 import (
+	"github.com/HuckOps/forge/server/repository/generic"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"golang.org/x/net/context"
 	"time"
 )
-
-type CPUSlot struct {
-	Slot      string  `json:"slot"`
-	Vendor    string  `json:"vendor"`
-	Model     string  `json:"model"`
-	Frequency float32 `json:"frequency"`
-}
-
-type MemorySlot struct {
-	Slot      string  `json:"slot"`
-	Vendor    string  `json:"vendor"`
-	Model     string  `json:"model"`
-	Frequency float32 `json:"frequency"`
-	Size      float32 `json:"size"`
-}
-
-type DiskSlot struct {
-	Slot   string  `json:"slot"`
-	Vendor string  `json:"vendor"`
-	Model  string  `json:"model"`
-	Size   float32 `json:"size"`
-}
-
-type NIC struct {
-	MAC     string `json:"mac"`
-	IP      string `json:"ip"`
-	Netmask string `json:"netmask"`
-}
 
 type Node struct {
 	BaseModel `bson:",inline"`
 
 	UUID string `json:"uuid" bson:"uuid"`
 
-	HostName string   `json:"hostname" bson:"hostname"`
-	IP       string   `json:"ip" bson:"ip"`
-	IPs      []string `json:"ips" bson:"ips"`
-
-	CPUSlot    []CPUSlot    `json:"cpuslot" bson:"cpuslot"`
-	MemorySlot []MemorySlot `json:"memoryslot" bson:"memoryslot"`
-	DiskSlot   []DiskSlot   `json:"diskslot" bson:"diskslot"`
-	NIC        []NIC        `json:"nic" bson:"nic"`
+	HostName string `json:"hostname" bson:"hostname"`
+	IP       string `json:"ip" bson:"ip"`
 
 	HeartBeat       time.Time `json:"heartbeat" bson:"heartbeat"`
 	HeartBeatStatus bool      `json:"heartbeat_status" bson:"heartbeat_status"`
@@ -52,4 +23,38 @@ type Node struct {
 
 func (model *Node) TableName() string {
 	return "node"
+}
+
+func (model *Node) Repository() *generic.Repository[Node] {
+	return generic.NewRepository[Node]("node",
+		generic.WithSoftDelete[Node](),
+	)
+}
+
+func (model *Node) Indexes() []mongo.IndexModel {
+	return []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				bson.E{Key: "uuid", Value: 1},
+				//bson.E{Key: "hostname", Value: 1},
+				bson.E{Key: "ip", Value: 1},
+				bson.E{Key: "deleted_at", Value: -1},
+			},
+			Options: options.Index().SetName("idx_uuid_ip_deleteted_at_unique").SetUnique(true),
+		},
+	}
+}
+
+func (model *Node) FindByUUID(ctx context.Context, uuid string) (*Node, error) {
+	err := model.Repository().Collection().FindOne(ctx, bson.M{"uuid": uuid}).Decode(model)
+	return model, err
+}
+
+type NodeLabel struct {
+	NodeID  bson.ObjectID `bson:"node_id"`
+	LabelID bson.ObjectID `bson:"label_id"`
+}
+
+func (model *NodeLabel) Repository() *generic.Repository[NodeLabel] {
+	return generic.NewRepository[NodeLabel]("node_label")
 }

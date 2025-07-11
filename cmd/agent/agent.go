@@ -2,39 +2,68 @@ package main
 
 import (
 	"github.com/HuckOps/forge/agent"
+	"github.com/HuckOps/forge/agent/pushgateway"
 	"github.com/HuckOps/forge/config"
-	"log"
+	"github.com/HuckOps/forge/internal/logger"
+	"go.uber.org/zap"
+	"golang.org/x/net/context"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
-	// 初始化配置
+	// Initialize context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Initialize logger
+	logger.InitLogger()
+	logger.Logger.Info("Application starting...")
+
+	// Load configuration
 	config.InitAgentConfig("./config/agent.yaml")
 
-	// 注册到注册中心
+	// Register to service registry
 	agent.Registry()
 
-	// 启动心跳服务
-	agent.StartHeartBeat()
+	// Start heartbeat service
+	agent.StartHeartBeat(ctx)
 
-	// 设置优雅退出
-	setupGracefulShutdown()
+	// Start PushGateway cron job
+	pushgateway.StartPushGatewayCron(ctx)
+
+	// Setup graceful shutdown
+	setupGracefulShutdown(ctx, cancel)
 }
 
-// 设置优雅退出机制
-func setupGracefulShutdown() {
+// Setup graceful shutdown mechanism
+func setupGracefulShutdown(ctx context.Context, cancel context.CancelFunc) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	// 阻塞等待退出信号
+	// Block until we receive shutdown signal
 	sig := <-sigCh
-	log.Printf("收到信号: %v，开始关闭程序...", sig)
+	logger.Logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
+	logger.Logger.Info("Initiating graceful shutdown...")
 
-	// 停止心跳服务
+	// Cancel the main context to notify all components
+	cancel()
+
+	// Stop heartbeat service
 	agent.StopHeartBeat()
 
-	log.Println("程序已优雅退出")
-	os.Exit(0)
+	// Stop all PushGateway instances
+	pushgateway.StopPushGateway()
+
+	// Allow some time for cleanup
+	select {
+	case <-time.After(5 * time.Second):
+		logger.Logger.Info("Cleanup timeout reached, exiting...")
+	case <-ctx.Done():
+		logger.Logger.Info("All components shutdown completed")
+	}
+
+	logger.Logger.Info("Application exited gracefully")
 }

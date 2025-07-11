@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/HuckOps/forge/config"
+	"github.com/HuckOps/forge/internal/logger"
 	uuid2 "github.com/google/uuid"
-	"log"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"os"
@@ -92,14 +93,20 @@ func Registry() {
 		"hostname": hostname,
 		"ip":       ip.String(),
 	}
+	logger.Logger.Info("Registry starting...",
+		zap.String("uuid", uuid),
+		zap.String("hostname", hostname),
+		zap.String("ip", ip.String()))
 	jsonData, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST",
 		fmt.Sprintf("%s/api/register", config.AgentConfig.RegistryCenter),
 		bytes.NewBuffer(jsonData))
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
-		log.Fatalln(err, resp.StatusCode)
+		logger.Logger.Error(fmt.Sprintf("Registry failed to register with registry status code: %v",
+			resp), zap.Error(err))
 		panic("Failed to register forge agent")
 	}
 	defer resp.Body.Close()
+
 }

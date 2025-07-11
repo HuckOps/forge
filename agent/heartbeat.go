@@ -4,68 +4,70 @@ import (
 	"context"
 	"fmt"
 	"github.com/HuckOps/forge/config"
-	"log"
+	"github.com/HuckOps/forge/internal/logger"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
 )
 
 var (
-	heartbeatCtx    context.Context
-	heartbeatCancel context.CancelFunc
-	heartbeatWg     sync.WaitGroup
+	heartbeatWg sync.WaitGroup
 )
 
-func init() {
-	heartbeatCtx, heartbeatCancel = context.WithCancel(context.Background())
-}
-
-// StartHeartBeat 启动心跳服务
-func StartHeartBeat() {
+// StartHeartBeat starts the heartbeat loop with the provided context.
+func StartHeartBeat(ctx context.Context) {
 	uuid := GetOrGenUUID()
-	log.Printf("启动心跳服务，UUID: %s", uuid)
+	logger.Logger.Info("Starting heartbeat service") // Optional structured field
+	// zap.String("uuid", uuid),
 
 	heartbeatWg.Add(1)
 	go func() {
 		defer heartbeatWg.Done()
-		heartbeatLoop(uuid)
+		heartbeatLoop(ctx, uuid)
 	}()
 }
 
-// StopHeartBeat 停止心跳服务
+// StopHeartBeat waits for the heartbeat loop to exit.
 func StopHeartBeat() {
-	log.Println("停止心跳服务...")
-	heartbeatCancel()
+	logger.Logger.Info("Waiting for heartbeat service to stop...")
 	heartbeatWg.Wait()
-	log.Println("心跳服务已停止")
+	logger.Logger.Info("Heartbeat service stopped")
 }
 
-// 心跳主循环
-func heartbeatLoop(uuid string) {
+// heartbeatLoop is the main heartbeat routine.
+func heartbeatLoop(ctx context.Context, uuid string) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
-	// 初始发送一次心跳
+	// Send initial heartbeat
 	if err := sendHeartBeat(uuid); err != nil {
-		log.Printf("初始心跳失败: %v", err)
+		logger.Logger.Warn("Initial heartbeat failed",
+			// zap.String("uuid", uuid),
+			zap.Error(err),
+		)
 	}
 
 	for {
 		select {
-		case <-heartbeatCtx.Done():
-			log.Println("收到停止信号，退出心跳循环")
+		case <-ctx.Done():
+			logger.Logger.Info("Heartbeat loop received shutdown signal")
 			return
 		case <-ticker.C:
 			if err := sendHeartBeat(uuid); err != nil {
-				log.Printf("心跳发送失败: %v", err)
+				logger.Logger.Error("Failed to send heartbeat",
+					zap.Error(err),
+				)
 
-				// 失败后重试
+				// Retry once asynchronously
 				go func() {
 					time.Sleep(2 * time.Second)
 					if err := sendHeartBeat(uuid); err != nil {
-						log.Printf("心跳重试失败: %v", err)
+						logger.Logger.Error("Heartbeat retry failed",
+							zap.Error(err),
+						)
 					} else {
-						log.Println("心跳重试成功")
+						logger.Logger.Info("Heartbeat retry succeeded")
 					}
 				}()
 			}
@@ -73,26 +75,37 @@ func heartbeatLoop(uuid string) {
 	}
 }
 
-// 发送心跳请求
+// sendHeartBeat sends a single heartbeat request.
 func sendHeartBeat(uuid string) error {
 	url := fmt.Sprintf("%s/api/heartbeat?uuid=%s", config.AgentConfig.RegistryCenter, uuid)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("创建请求失败: %w", err)
+		logger.Logger.Error("Failed to create heartbeat request",
+			zap.Error(err),
+		)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("请求发送失败: %w", err)
+		logger.Logger.Error("Heartbeat request failed",
+			zap.Error(err),
+		)
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("非预期状态码: %d", resp.StatusCode)
+		logger.Logger.Error("Heartbeat request returned non-200 status",
+			// zap.String("url", url),
+			// zap.String("uuid", uuid),
+			zap.Int("status", resp.StatusCode),
+		)
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	log.Println("心跳发送成功")
+	logger.Logger.Info("Heartbeat sent successfully")
 	return nil
 }

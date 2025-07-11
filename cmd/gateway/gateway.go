@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/HuckOps/forge/config"
+	"github.com/HuckOps/forge/db"
 	"github.com/HuckOps/forge/gateway"
 	"github.com/HuckOps/forge/mq"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,8 @@ func main() {
 	defer cancel()
 	config.InitGatewayConfig("./config/gateway.yaml")
 	mq.InitAMQP(ctx, config.GatewayConfig.AMQP)
+	db.InitRedisCluster(ctx, config.GatewayConfig.RedisCluster)
+	db.InitMongo(ctx, config.GatewayConfig.MongoURL)
 	r := gin.Default()
 	gateway.RegistryRouter(r)
 
